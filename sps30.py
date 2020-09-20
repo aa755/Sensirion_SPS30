@@ -2,7 +2,7 @@
 Binh Nguyen, June 14, 2020
 - A fork from Szymon Jakubiak (2018)
 - additional feature:
- 1. push data to MQTT server 
+ 1. push data to MQTT server
  2. log file to CSV format (both of them are optional)
  3. run multiple SPS30 with USB hub (quality check SPS30 sensors)
 """
@@ -13,11 +13,11 @@ from operator import invert
 import os
 import json
 import socket
-import paho.mqtt.publish as publish
+#import paho.mqtt.publish as publish
 
 # set localtime
-os.environ['TZ'] = 'Asia/Ho_Chi_Minh'
-time.tzset()
+#os.environ['TZ'] = 'Asia/Ho_Chi_Minh'
+#time.tzset()
 
 # MQTT host, users
 mqtt = '192.168.1.100'  # change this
@@ -84,12 +84,12 @@ def record_data(data):
 
 def push_mqtt_server(data):
     '''push data to MQTT server'''
-    
+
     header = ['sensor','time','PM1','PM25','PM4','PM10','b0305',
             'b031','b0325','b034','b0310','tsize']
     data = data.split(',')
     if len(header) == len(data):
-        print(f'Process for MQTT {data}')    
+        print(f'Process for MQTT {data}')
         payload = dict(zip(header,data))
         payload['type'] = 'json'
         print(f'MQTT: {payload}')
@@ -108,7 +108,7 @@ def push_mqtt_server(data):
 class SPS30:
     NAME = 'SPS30'
     WARMUP = 20 # seconds
-    
+
     def __init__(self, port, save_data=True, push_mqtt=False, INTERVAL=60):
         self.port = port
         self.interval = INTERVAL
@@ -124,13 +124,13 @@ class SPS30:
     def __str__(self):
         return f'{self.port}, {self.name}, {self.fanOn}, {self.lastSample}'
 
-    
+
     def start(self):
         self.ser.write([0x7E, 0x00, 0x00, 0x02, 0x01, 0x03, 0xF9, 0x7E])
-        
+
     def stop(self):
         self.ser.write([0x7E, 0x00, 0x01, 0x00, 0xFE, 0x7E])
-    
+
     def read_values(self):
         self.ser.flushInput()
         # Ask for data
@@ -144,7 +144,7 @@ class SPS30:
             print(f'Wait: {toRead}')
             time.sleep(1)
         raw = self.ser.read(toRead)
-        
+
         # Reverse byte-stuffing
         if b'\x7D\x5E' in raw:
             raw = raw.replace(b'\x7D\x5E', b'\x7E')
@@ -154,16 +154,16 @@ class SPS30:
             raw = raw.replace(b'\x7D\x31', b'\x11')
         if b'\x7D\x33' in raw:
             raw = raw.replace(b'\x7D\x33', b'\x13')
-        
+
         # Discard header and tail
         rawData = raw[5:-2]
-        
+
         try:
             data = struct.unpack(">ffffffffff", rawData)
         except struct.error:
             data = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         return data
-    
+
     def read_serial_number(self):
         self.ser.flushInput()
         self.ser.write([0x7E, 0x00, 0xD0, 0x01, 0x03, 0x2B, 0x7E])
@@ -173,7 +173,7 @@ class SPS30:
             print(f'Wait: {toRead}')
             time.sleep(1)
         raw = self.ser.read(toRead)
-        
+
         # Reverse byte-stuffing
         if b'\x7D\x5E' in raw:
             raw = raw.replace(b'\x7D\x5E', b'\x7E')
@@ -183,14 +183,14 @@ class SPS30:
             raw = raw.replace(b'\x7D\x31', b'\x11')
         if b'\x7D\x33' in raw:
             raw = raw.replace(b'\x7D\x33', b'\x13')
-        
+
         # Discard header, tail and decode
         serial_number = raw[5:-3].decode('ascii')
         return serial_number
 
     def run_query(self):
         if time_() - self.lastSample >= self.interval:
-            if not self.is_started:   
+            if not self.is_started:
                 self.start()
                 self.fanOn = time_()
                 self.is_started = True
@@ -211,8 +211,9 @@ class SPS30:
                     self.is_started = False
                 if self.save_data:
                     record_data(output)
-                if self.push_mqtt:
-                    push_mqtt_server(output)
+                # if self.push_mqtt:
+                #     push_mqtt_server(output)
+                print(output)
             else:
                 time.sleep(1)
         return None
@@ -226,9 +227,8 @@ if __name__ == '__main__':
     usbs = get_usb()
     print(usbs)
     process = list()
-    for port in usbs:
-        p = SPS30(port=port, push_mqtt=False)
-        process.append(p)
+    p = SPS30(port='/dev/ttyUSB0', push_mqtt=False)
+    process.append(p)
     print('Starting')
     while True:
         for p in process:
